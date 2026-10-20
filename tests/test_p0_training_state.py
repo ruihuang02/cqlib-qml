@@ -742,6 +742,55 @@ def test_loader_restore_after_dataset_replacement_preserves_shuffle(drop_last):
     assert saved['iteration_started'] is False
 
 
+@pytest.mark.parametrize('drop_last', [False, True])
+@pytest.mark.parametrize('shuffle', [False, True])
+def test_loader_direct_next_resume_starts_new_epoch_after_exhaustion(drop_last, shuffle):
+    source = DataLoader(Dataset(np.arange(8)), batch_size=2, shuffle=shuffle, random_state=7,
+                        drop_last=drop_last)
+    next(iter(source))
+    dataset = Dataset(np.arange(11))
+    source.dataset = dataset
+    next(iter(source))
+
+    restored = DataLoader(dataset, batch_size=2, shuffle=shuffle, random_state=99,
+                          drop_last=drop_last)
+    restored.load_state_dict(source.state_dict())
+
+    def drain_direct(loader):
+        batches = []
+        while True:
+            try:
+                batches.append(next(loader))
+            except StopIteration:
+                return batches
+
+    assert_exact_state(drain_direct(restored), drain_direct(source))
+    assert_exact_state(restored.state_dict(), source.state_dict())
+    assert_exact_state(list(restored), list(source))
+    assert_exact_state(restored.state_dict(), source.state_dict())
+
+
+@pytest.mark.parametrize('drop_last', [False, True])
+@pytest.mark.parametrize('shuffle', [False, True])
+def test_loader_direct_next_then_iter_resumes_remaining_batches(drop_last, shuffle):
+    dataset = Dataset(np.arange(11))
+    source = DataLoader(dataset, batch_size=2, shuffle=shuffle, random_state=7,
+                        drop_last=drop_last)
+    next(iter(source))
+    saved = source.state_dict()
+
+    mixed = DataLoader(dataset, batch_size=2, shuffle=shuffle, drop_last=drop_last)
+    mixed.load_state_dict(saved)
+    direct = DataLoader(dataset, batch_size=2, shuffle=shuffle, drop_last=drop_last)
+    direct.load_state_dict(saved)
+
+    assert_exact_state(next(mixed), next(direct))
+    remaining = [next(direct) for _ in range(len(direct) - 2)]
+    assert_exact_state(list(mixed), remaining)
+    assert_exact_state(mixed.state_dict(), direct.state_dict())
+    assert_exact_state(list(mixed), list(direct))
+
+
 @pytest.mark.parametrize('bias', [False, True])
 def test_linear_init_params_invalidates_recorded_forward(bias):
     layer = Linear(1, 1, bias=bias, random_state=7)
