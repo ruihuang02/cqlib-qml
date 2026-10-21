@@ -324,7 +324,6 @@ class DataLoader:
         """
         if self._it < self._end:
             ret_data = self._dataset[self._idx[self._it * self._batch_size : (self._it + 1) * self._batch_size]]
-            self._iteration_started = True
             self._it += 1
             if self._it == self._end:
                 # Direct next() can finish a restored epoch without calling
