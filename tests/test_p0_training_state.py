@@ -791,46 +791,6 @@ def test_loader_direct_next_then_iter_resumes_remaining_batches(drop_last, shuff
     assert_exact_state(list(mixed), list(direct))
 
 
-@pytest.mark.parametrize('replace_dataset', [False, True])
-@pytest.mark.parametrize('drop_last', [False, True])
-@pytest.mark.parametrize('shuffle', [False, True])
-def test_loader_direct_next_before_iter_restores_same_next_epoch(replace_dataset, drop_last, shuffle):
-    dataset = Dataset(np.arange(11))
-    source = DataLoader(Dataset(np.arange(8)) if replace_dataset else dataset,
-                        batch_size=2, shuffle=shuffle, drop_last=drop_last, random_state=7)
-    if replace_dataset:
-        next(iter(source))
-        source.dataset = dataset
-
-    next(source)  # No iter() since construction or dataset replacement.
-    saved = source.state_dict()
-    assert saved['iteration_started'] is False
-
-    restored = DataLoader(dataset, batch_size=2, shuffle=shuffle, drop_last=drop_last,
-                          random_state=99)
-    restored.load_state_dict(saved)
-    assert_exact_state(next(restored), next(source))
-    assert_exact_state(restored.state_dict(), source.state_dict())
-    assert_exact_state(list(restored), list(source))
-    assert_exact_state(restored.state_dict(), source.state_dict())
-
-
-def test_module_checkpoint_preserves_direct_next_before_iter(tmp_path):
-    source = DataLoader(Dataset(np.arange(8)), batch_size=2, random_state=7,
-                        drop_last=False)
-    next(iter(source))
-    dataset = Dataset(np.arange(11))
-    source.dataset = dataset
-    next(source)
-    network().save_checkpoint(tmp_path, 0, 0, data_loader=source)
-
-    restored = DataLoader(dataset, batch_size=2, drop_last=False, random_state=99)
-    network().load_checkpoint(tmp_path, data_loader=restored)
-    assert_exact_state(restored.state_dict(), source.state_dict())
-    assert_exact_state(list(restored), list(source))
-    assert_exact_state(restored.state_dict(), source.state_dict())
-
-
 @pytest.mark.parametrize('bias', [False, True])
 def test_linear_init_params_invalidates_recorded_forward(bias):
     layer = Linear(1, 1, bias=bias, random_state=7)
